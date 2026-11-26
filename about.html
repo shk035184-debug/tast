@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내신 성적 분석 시스템 - 2. 성적 입력 및 학점 반영 분석</title>
+    <!-- Tailwind CSS 로드 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Noto Sans KR & Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Noto+Sans+KR:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .fade-in {
+            animation: fadeIn 0.4s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col justify-between">
+
+    <!-- 상단 네비게이션 바 -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                    G
+                </div>
+                <span class="font-bold text-lg tracking-tight text-slate-900">GradeLens <span class="text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full ml-1">내신분석</span></span>
+            </div>
+            
+            <!-- 3개 웹 페이지 진행 상태 -->
+            <nav class="hidden md:flex space-x-1 bg-slate-100 p-1 rounded-xl">
+                <a href="index.html" class="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-800 transition">
+                    1. 표지 (학생 정보)
+                </a>
+                <span class="px-4 py-1.5 rounded-lg text-sm font-semibold bg-white text-indigo-600 shadow-sm">
+                    2. 등급·성취도 및 학점 분석
+                </span>
+                <span class="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-400">
+                    3. 종합 리포트
+                </span>
+            </nav>
+
+            <!-- 1번 웹에서 불러온 학생 정보 배지 -->
+            <div id="student-badge" class="text-xs font-bold bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full border border-indigo-100">
+                학생 정보 불러오는 중...
+            </div>
+        </div>
+    </header>
+
+    <!-- 알림 토스트 박스 (alert 대체) -->
+    <div id="toast-box" class="fixed bottom-6 right-6 z-50 hidden transition-all duration-300">
+        <div class="bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-xl flex items-center space-x-3 border border-slate-700">
+            <span id="toast-icon" class="text-indigo-400 text-lg">ℹ️</span>
+            <p id="toast-message" class="text-sm font-medium"></p>
+        </div>
+    </div>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="flex-grow max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        
+        <!-- 상단 안내 배너 -->
+        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-md">Step 02</span>
+                    <h1 class="text-xl sm:text-2xl font-bold text-slate-900" id="welcome-title">성적 입력 및 학점 반영 분석</h1>
+                </div>
+                <p class="text-xs sm:text-sm text-slate-500 mt-1">
+                    과목별 이수 시간(학점), 석차등급, 성취도를 입력하면 <strong>학점 가중치가 반영된 실제 내신 등급</strong>을 실시간으로 분석합니다.
+                </p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="loadSampleData()" class="text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2.5 rounded-xl transition">
+                    📋 예시 데이터 채우기
+                </button>
+                <button onclick="resetAllSubjects()" class="text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-600 px-3.5 py-2.5 rounded-xl transition">
+                    🗑️ 초기화
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            <!-- 왼쪽: 과목 입력 폼 및 입력된 과목 리스트 (7칸) -->
+            <div class="lg:col-span-7 space-y-6">
+                
+                <!-- 과목 추가 카드 -->
+                <div class="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-5">
+                    <h2 class="text-base font-bold text-slate-900 flex items-center space-x-2">
+                        <span>➕ 과목 성적 추가</span>
+                        <span class="text-xs font-normal text-slate-400">(2022 개정 5등급제 · 1-1 ~ 3-1학기)</span>
+                    </h2>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <!-- 이수 학기 선택 (1학년 1학기 ~ 3학년 1학기) -->
+                        <div>
+                            <label for="subject-semester" class="block text-xs font-bold text-indigo-700 mb-1.5">이수 학기</label>
+                            <select id="subject-semester" class="w-full text-sm border border-indigo-200 rounded-xl px-3.5 py-2.5 bg-indigo-50/50 text-indigo-900 font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="1학년 1학기">1학년 1학기</option>
+                                <option value="1학년 2학기">1학년 2학기</option>
+                                <option value="2학년 1학기">2학년 1학기</option>
+                                <option value="2학년 2학기">2학년 2학기</option>
+                                <option value="3학년 1학기">3학년 1학기</option>
+                            </select>
+                        </div>
+
+                        <!-- 교과군 -->
+                        <div>
+                            <label for="subject-category" class="block text-xs font-bold text-slate-700 mb-1.5">교과 구분</label>
+                            <select id="subject-category" class="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="국어">국어</option>
+                                <option value="수학">수학</option>
+                                <option value="영어">영어</option>
+                                <option value="사회">사회(역사/도덕 포함)</option>
+                                <option value="과학">과학</option>
+                                <option value="정보/기타">정보 · 제2외국어 · 기타</option>
+                            </select>
+                        </div>
+
+                        <!-- 과목명 -->
+                        <div>
+                            <label for="subject-name" class="block text-xs font-bold text-slate-700 mb-1.5">과목명</label>
+                            <input type="text" id="subject-name" placeholder="예: 공통수학1, 대수, 정보" class="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-3">
+                        <!-- 과목 시간에 따른 학점(단위수) -->
+                        <div>
+                            <label for="subject-credit" class="block text-xs font-bold text-indigo-700 mb-1.5">이수 학점(시수)</label>
+                            <select id="subject-credit" class="w-full text-sm border border-indigo-200 rounded-xl px-3 py-2.5 bg-indigo-50/50 text-indigo-900 font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="1">1학점 (주 1시간)</option>
+                                <option value="2">2학점 (주 2시간)</option>
+                                <option value="3">3학점 (주 3시간)</option>
+                                <option value="4" selected="">4학점 (주 4시간)</option>
+                                <option value="5">5학점 (주 5시간)</option>
+                                <option value="6">6학점 (주 6시간)</option>
+                            </select>
+                        </div>
+
+                        <!-- 2022 개정 5등급제 석차 등급 -->
+                        <div>
+                            <label for="subject-rank" class="block text-xs font-bold text-slate-700 mb-1.5">석차 등급 (5등급제)</label>
+                            <select id="subject-rank" class="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-slate-50 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="1">1등급 (상위 10%)</option>
+                                <option value="2" selected="">2등급 (상위 34%)</option>
+                                <option value="3">3등급 (상위 66%)</option>
+                                <option value="4">4등급 (상위 90%)</option>
+                                <option value="5">5등급 (상위 100%)</option>
+                            </select>
+                        </div>
+
+                        <!-- 성취도 -->
+                        <div>
+                            <label for="subject-achievement" class="block text-xs font-bold text-slate-700 mb-1.5">성취도</label>
+                            <select id="subject-achievement" class="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-slate-50 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="A">A (90점 이상)</option>
+                                <option value="B" selected="">B (80점 이상)</option>
+                                <option value="C">C (70점 이상)</option>
+                                <option value="D">D (60점 이상)</option>
+                                <option value="E">E (60점 미만)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button onclick="addSubject()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-sm transition transform active:scale-95 text-sm">
+                        + 내신 목록에 과목 추가하기
+                    </button>
+                </div>
+
+                <!-- 입력된 과목 리스트 카드 -->
+                <div class="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h2 class="text-base font-bold text-slate-900">📚 입력된 과목 목록</h2>
+                        <div class="flex items-center space-x-2">
+                            <!-- 학기별 필터링 -->
+                            <select id="semester-filter" onchange="renderAll()" class="text-xs font-semibold border border-slate-200 rounded-lg px-2.5 py-1 bg-slate-50 text-slate-700 focus:outline-none">
+                                <option value="ALL">전체 학기 (1-1 ~ 3-1)</option>
+                                <option value="1학년 1학기">1학년 1학기</option>
+                                <option value="1학년 2학기">1학년 2학기</option>
+                                <option value="2학년 1학기">2학년 1학기</option>
+                                <option value="2학년 2학기">2학년 2학기</option>
+                                <option value="3학년 1학기">3학년 1학기</option>
+                            </select>
+                            <span id="subject-count-badge" class="text-xs font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">
+                                총 0과목 · 0학점
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- 테이블 / 리스트 컨테이너 -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="border-b border-slate-200 text-xs text-slate-400">
+                                    <th class="py-2.5 px-2 font-semibold">학기</th>
+                                    <th class="py-2.5 px-2 font-semibold">교과</th>
+                                    <th class="py-2.5 px-2 font-semibold">과목명</th>
+                                    <th class="py-2.5 px-2 font-semibold text-center">학점</th>
+                                    <th class="py-2.5 px-2 font-semibold text-center">등급</th>
+                                    <th class="py-2.5 px-2 font-semibold text-center">성취도</th>
+                                    <th class="py-2.5 px-2 font-semibold text-right">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody id="subject-list-body" class="divide-y divide-slate-100 text-sm">
+                                <!-- JS로 동적 렌더링 -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 빈 상태 안내 -->
+                    <div id="empty-state" class="text-center py-10 space-y-2">
+                        <p class="text-2xl">📝</p>
+                        <p class="text-sm font-semibold text-slate-600">아직 입력된 과목이 없습니다.</p>
+                        <p class="text-xs text-slate-400">위에서 과목명과 학점, 등급, 성취도를 입력해 추가해보세요.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 오른쪽: 실시간 학점 반영 내신 분석 결과 대시보드 (5칸) -->
+            <div class="lg:col-span-5 space-y-6">
+                
+                <!-- 핵심 요약 결과 카드 -->
+                <div class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-7 shadow-xl space-y-6 relative overflow-hidden">
+                    <div class="absolute -top-16 -right-16 w-48 h-48 bg-indigo-500 opacity-20 rounded-full blur-2xl"></div>
+
+                    <div class="relative z-10 flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-indigo-300">학점 가중치 반영 결과</span>
+                        <span id="total-credits-pill" class="text-xs bg-white/10 px-3 py-1 rounded-full font-semibold">
+                            총 이수 0학점
+                        </span>
+                    </div>
+
+                    <!-- 가중 평균 등급 메인 표시 -->
+                    <div class="relative z-10 text-center py-2">
+                        <p class="text-xs text-slate-300 mb-1">학점 반영 최종 평균 등급</p>
+                        <div class="flex items-baseline justify-center space-x-1">
+                            <span id="weighted-grade-display" class="text-5xl font-black tracking-tight text-white">-</span>
+                            <span class="text-lg font-bold text-indigo-300">등급</span>
+                        </div>
+                        <p id="grade-diff-badge" class="text-xs text-indigo-200 mt-2 bg-white/10 inline-block px-3 py-1 rounded-full">
+                            과목을 입력하면 단순 평균과 비교됩니다
+                        </p>
+                    </div>
+
+                    <!-- 단순 평균 vs 학점 반영 평균 비교 박스 -->
+                    <div class="relative z-10 grid grid-cols-2 gap-3 pt-2 border-t border-white/10">
+                        <div class="bg-white/5 rounded-2xl p-3.5 text-center">
+                            <p class="text-[11px] text-slate-400">단순 산술 평균</p>
+                            <p id="simple-grade-display" class="text-lg font-bold text-slate-200 mt-0.5">- 등급</p>
+                        </div>
+                        <div class="bg-indigo-500/20 border border-indigo-400/30 rounded-2xl p-3.5 text-center">
+                            <p class="text-[11px] text-indigo-200">학점 비례 평균</p>
+                            <p id="weighted-grade-sub" class="text-lg font-bold text-white mt-0.5">- 등급</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 성취도 분포 및 학점 비중 분석 카드 -->
+                <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
+                    <h3 class="text-base font-bold text-slate-900">📊 성취도(A~E) 학점 분포 분석</h3>
+                    
+                    <div id="achievement-bars" class="space-y-3">
+                        <!-- A ~ E 분포 막대 그래프 (JS 동적 생성) -->
+                    </div>
+
+                    <!-- 교과별 가중 평균 요약 -->
+                    <div class="pt-4 border-t border-slate-100 space-y-2.5">
+                        <h4 class="text-xs font-bold text-slate-500 uppercase">교과군별 학점 반영 평균</h4>
+                        <div id="category-summary" class="grid grid-cols-2 gap-2 text-xs">
+                            <p class="text-slate-400 col-span-2">과목을 추가하면 교과별 분석이 표시됩니다.</p>
+                        </div>
+                    </div>
+
+                    <!-- 학기별(1-1 ~ 3-1) 가중 평균 요약 -->
+                    <div class="pt-4 border-t border-slate-100 space-y-2.5">
+                        <h4 class="text-xs font-bold text-slate-500 uppercase">학기별 학점 반영 평균 (1-1 ~ 3-1)</h4>
+                        <div id="semester-summary" class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                            <p class="text-slate-400 col-span-3">과목을 추가하면 학기별 추이가 표시됩니다.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 종합 분석 코멘트 및 3번 웹 이동 버튼 -->
+                <div class="bg-indigo-50 border border-indigo-100 rounded-3xl p-6 space-y-4">
+                    <div class="flex items-start space-x-3">
+                        <span class="text-xl">💡</span>
+                        <div class="space-y-1">
+                            <h4 class="text-sm font-bold text-indigo-950">AI 내신 분석 피드백</h4>
+                            <p id="analysis-feedback" class="text-xs text-indigo-800 leading-relaxed">
+                                과목별 학점과 등급, 성취도를 입력하면 고학점 과목의 성적 유불리를 분석해 드립니다.
+                            </p>
+                        </div>
+                    </div>
+
+                    <button onclick="saveAndGoNext()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl shadow-md transition transform active:scale-95 text-sm flex items-center justify-center space-x-2">
+                        <span>분석 데이터 저장하고 3번 웹으로</span>
+                        <span>→</span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- 푸터 -->
+    <footer class="bg-white border-t border-slate-200 py-5 mt-12">
+        <div class="max-w-6xl mx-auto px-4 text-center text-xs text-slate-400">
+            소프트웨어와 생활 수행평가 · 2페이지: 등급·성취도 입력 및 학점 반영 내신 분석
+        </div>
+    </footer>
+
+    <!-- 자바스크립트 로직 -->
+    <script>
+        // 전역 과목 배열 상태
+        let subjects = [];
+
+        // 페이지 로드 시 1번 웹의 학생 정보 및 기존 저장된 성적 불러오기
+        window.onload = function () {
+            loadStudentInfo();
+            const savedSubjects = localStorage.getItem('studentSubjectsData');
+            if (savedSubjects) {
+                subjects = JSON.parse(savedSubjects);
+            }
+            renderAll();
+        };
+
+        // 1번 웹(표지)에서 저장한 학교명과 이름 불러오기
+        function loadStudentInfo() {
+            const savedInfo = localStorage.getItem('studentBasicInfo');
+            const badge = document.getElementById('student-badge');
+            const title = document.getElementById('welcome-title');
+
+            if (savedInfo) {
+                const { school, name } = JSON.parse(savedInfo);
+                badge.textContent = `🏫 ${school} · ${name} 학생`;
+                title.textContent = `${school} ${name}님의 내신 성적 분석`;
+            } else {
+                badge.textContent = `👤 미등록 학생 (1번 웹에서 입력 가능)`;
+            }
+        }
+
+        // 커스텀 알림 토스트 함수
+        function showToast(message, icon = "ℹ️") {
+            const toastBox = document.getElementById('toast-box');
+            const toastMsg = document.getElementById('toast-message');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastMsg.textContent = message;
+            toastIcon.textContent = icon;
+            toastBox.classList.remove('hidden');
+
+            setTimeout(() => {
+                toastBox.classList.add('hidden');
+            }, 3200);
+        }
+
+        // 과목 추가 함수
+        function addSubject() {
+            const semester = document.getElementById('subject-semester').value;
+            const category = document.getElementById('subject-category').value;
+            const nameInput = document.getElementById('subject-name');
+            const name = nameInput.value.trim();
+            const credit = parseInt(document.getElementById('subject-credit').value, 10);
+            const rank = parseInt(document.getElementById('subject-rank').value, 10);
+            const achievement = document.getElementById('subject-achievement').value;
+
+            if (!name) {
+                showToast("과목명을 입력해주세요! (예: 공통수학1, 대수, 정보)", "⚠️");
+                nameInput.focus();
+                return;
+            }
+
+            const newSubject = {
+                id: Date.now(),
+                semester,
+                category,
+                name,
+                credit,
+                rank,
+                achievement
+            };
+
+            subjects.push(newSubject);
+            saveSubjectsToStorage();
+            renderAll();
+
+            // 입력창 초기화
+            nameInput.value = '';
+            nameInput.focus();
+            showToast(`[${semester}] '${name}' (${credit}학점 · ${rank}등급 · ${achievement}) 추가 완료!`, "✅");
+        }
+
+        // 개별 과목 삭제 함수
+        function deleteSubject(id) {
+            subjects = subjects.filter(sub => sub.id !== id);
+            saveSubjectsToStorage();
+            renderAll();
+            showToast("과목이 삭제되었습니다.", "🗑️");
+        }
+
+        // 전체 초기화 함수
+        function resetAllSubjects() {
+            if (subjects.length === 0) return;
+            subjects = [];
+            saveSubjectsToStorage();
+            renderAll();
+            showToast("모든 과목 데이터가 초기화되었습니다.", "🔄");
+        }
+
+        // 수행평가 시연용 예시 데이터 채우기 (1학년 1학기 ~ 3학년 1학기, 2022 개정 5등급제 기준)
+        function loadSampleData() {
+            subjects = [
+                { id: 1, semester: '1학년 1학기', category: '국어', name: '공통국어1', credit: 4, rank: 2, achievement: 'A' },
+                { id: 2, semester: '1학년 2학기', category: '수학', name: '공통수학2', credit: 4, rank: 1, achievement: 'A' },
+                { id: 3, semester: '2학년 1학기', category: '영어', name: '영어Ⅰ', credit: 4, rank: 2, achievement: 'A' },
+                { id: 4, semester: '2학년 2학기', category: '과학', name: '물리학', credit: 3, rank: 2, achievement: 'B' },
+                { id: 5, semester: '3학년 1학기', category: '정보/기타', name: '인공지능 기초', credit: 3, rank: 1, achievement: 'A' }
+            ];
+            saveSubjectsToStorage();
+            renderAll();
+            showToast("1-1 ~ 3-1학기 시연용 샘플 데이터(5등급제 기준)가 입력되었습니다!", "✨");
+        }
+
+        // localStorage에 현재 과목 목록 저장
+        function saveSubjectsToStorage() {
+            localStorage.setItem('studentSubjectsData', JSON.stringify(subjects));
+        }
+
+        // 전체 화면 및 분석 데이터 업데이트
+        function renderAll() {
+            renderSubjectTable();
+            calculateAndRenderAnalysis();
+        }
+
+        // 과목 리스트 테이블 렌더링
+        function renderSubjectTable() {
+            const tbody = document.getElementById('subject-list-body');
+            const emptyState = document.getElementById('empty-state');
+            const countBadge = document.getElementById('subject-count-badge');
+            const filterVal = document.getElementById('semester-filter').value;
+
+            const filteredSubjects = filterVal === 'ALL' 
+                ? subjects 
+                : subjects.filter(s => s.semester === filterVal);
+
+            tbody.innerHTML = '';
+
+            if (filteredSubjects.length === 0) {
+                emptyState.classList.remove('hidden');
+                countBadge.textContent = '총 0과목 · 0학점';
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            const totalCredits = filteredSubjects.reduce((sum, s) => sum + s.credit, 0);
+            countBadge.textContent = `총 ${filteredSubjects.length}과목 · ${totalCredits}학점`;
+
+            filteredSubjects.forEach(sub => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition fade-in';
+
+                // 성취도 색상 배지 스타일
+                const achColors = {
+                    'A': 'bg-emerald-100 text-emerald-700',
+                    'B': 'bg-blue-100 text-blue-700',
+                    'C': 'bg-amber-100 text-amber-700',
+                    'D': 'bg-orange-100 text-orange-700',
+                    'E': 'bg-rose-100 text-rose-700'
+                };
+
+                tr.innerHTML = `
+                    <td class="py-3 px-2 whitespace-nowrap">
+                        <span class="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">${sub.semester || '1학년 1학기'}</span>
+                    </td>
+                    <td class="py-3 px-2 whitespace-nowrap">
+                        <span class="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">${sub.category}</span>
+                    </td>
+                    <td class="py-3 px-2 font-bold text-slate-800">${sub.name}</td>
+                    <td class="py-3 px-2 text-center">
+                        <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">${sub.credit}학점</span>
+                    </td>
+                    <td class="py-3 px-2 text-center font-bold text-slate-900">${sub.rank}등급</td>
+                    <td class="py-3 px-2 text-center">
+                        <span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${achColors[sub.achievement] || 'bg-slate-100'}">${sub.achievement}</span>
+                    </td>
+                    <td class="py-3 px-2 text-right">
+                        <button onclick="deleteSubject(${sub.id})" class="text-xs text-slate-400 hover:text-rose-600 font-semibold px-2 py-1 rounded transition">
+                            삭제
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 학점 반영 내신 분석 계산 및 렌더링
+        function calculateAndRenderAnalysis() {
+            const weightedDisplay = document.getElementById('weighted-grade-display');
+            const weightedSub = document.getElementById('weighted-grade-sub');
+            const simpleDisplay = document.getElementById('simple-grade-display');
+            const totalCreditsPill = document.getElementById('total-credits-pill');
+            const diffBadge = document.getElementById('grade-diff-badge');
+            const feedbackEl = document.getElementById('analysis-feedback');
+            const achievementBars = document.getElementById('achievement-bars');
+            const categorySummary = document.getElementById('category-summary');
+            const semesterSummary = document.getElementById('semester-summary');
+
+            if (subjects.length === 0) {
+                weightedDisplay.textContent = '-';
+                weightedSub.textContent = '- 등급';
+                simpleDisplay.textContent = '- 등급';
+                totalCreditsPill.textContent = '총 이수 0학점';
+                diffBadge.textContent = '과목을 입력하면 단순 평균과 비교됩니다';
+                feedbackEl.textContent = '과목별 학점과 등급, 성취도를 입력하면 고학점 과목의 성적 유불리를 분석해 드립니다.';
+                achievementBars.innerHTML = '<p class="text-xs text-slate-400">입력된 과목이 없어 성취도 분포를 표시할 수 없습니다.</p>';
+                categorySummary.innerHTML = '<p class="text-slate-400 col-span-2">과목을 추가하면 교과별 분석이 표시됩니다.</p>';
+                semesterSummary.innerHTML = '<p class="text-slate-400 col-span-3">과목을 추가하면 학기별 추이가 표시됩니다.</p>';
+                return;
+            }
+
+            // 1. 학점 가중 평균 및 단순 산술 평균 계산
+            let totalCredits = 0;
+            let weightedRankSum = 0;
+            let simpleRankSum = 0;
+
+            subjects.forEach(sub => {
+                totalCredits += sub.credit;
+                weightedRankSum += (sub.rank * sub.credit);
+                simpleRankSum += sub.rank;
+            });
+
+            const weightedAvg = weightedRankSum / totalCredits;
+            const simpleAvg = simpleRankSum / subjects.length;
+
+            weightedDisplay.textContent = weightedAvg.toFixed(2);
+            weightedSub.textContent = `${weightedAvg.toFixed(2)} 등급`;
+            simpleDisplay.textContent = `${simpleAvg.toFixed(2)} 등급`;
+            totalCreditsPill.textContent = `총 이수 ${totalCredits}학점`;
+
+            // 2. 단순 평균 vs 학점 반영 평균 차이 분석
+            const diff = simpleAvg - weightedAvg; // 양수면 학점 반영 시 등급이 더 좋아짐(숫자가 낮아짐)
+            if (Math.abs(diff) < 0.01) {
+                diffBadge.textContent = '단순 평균과 학점 반영 평균이 동일합니다';
+            } else if (diff > 0) {
+                diffBadge.textContent = `🎉 학점 반영으로 단순 평균보다 ${diff.toFixed(2)}등급 유리해졌습니다!`;
+            } else {
+                diffBadge.textContent = `⚠️ 고학점 과목 영향으로 단순 평균보다 ${Math.abs(diff).toFixed(2)}등급 낮아졌습니다.`;
+            }
+
+            // 3. 성취도(A~E)별 이수 학점 비중 계산
+            const achLevels = ['A', 'B', 'C', 'D', 'E'];
+            const achColors = {
+                'A': 'bg-emerald-500',
+                'B': 'bg-blue-500',
+                'C': 'bg-amber-500',
+                'D': 'bg-orange-500',
+                'E': 'bg-rose-500'
+            };
+
+            achievementBars.innerHTML = '';
+            achLevels.forEach(level => {
+                const levelCredits = subjects
+                    .filter(s => s.achievement === level)
+                    .reduce((sum, s) => sum + s.credit, 0);
+                const percent = totalCredits > 0 ? Math.round((levelCredits / totalCredits) * 100) : 0;
+
+                achievementBars.innerHTML += `
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs font-semibold">
+                            <span class="text-slate-700">성취도 ${level}</span>
+                            <span class="text-slate-500">${levelCredits}학점 (${percent}%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div class="${achColors[level]} h-full rounded-full transition-all duration-500" style="width: ${percent}%"></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // 4. 교과군별 학점 반영 평균 계산
+            const categoryMap = {};
+            subjects.forEach(sub => {
+                if (!categoryMap[sub.category]) {
+                    categoryMap[sub.category] = { credits: 0, weightedSum: 0 };
+                }
+                categoryMap[sub.category].credits += sub.credit;
+                categoryMap[sub.category].weightedSum += sub.rank * sub.credit;
+            });
+
+            categorySummary.innerHTML = '';
+            Object.keys(categoryMap).forEach(cat => {
+                const catAvg = (categoryMap[cat].weightedSum / categoryMap[cat].credits).toFixed(2);
+                categorySummary.innerHTML += `
+                    <div class="bg-slate-50 border border-slate-100 rounded-xl p-2.5 flex items-center justify-between">
+                        <span class="font-semibold text-slate-700">${cat} (${categoryMap[cat].credits}학점)</span>
+                        <span class="font-bold text-indigo-600">${catAvg}등급</span>
+                    </div>
+                `;
+            });
+
+            // 4-2. 학기별(1학년 1학기 ~ 3학년 1학기) 학점 반영 평균 계산
+            const semesterOrder = ['1학년 1학기', '1학년 2학기', '2학년 1학기', '2학년 2학기', '3학년 1학기'];
+            semesterSummary.innerHTML = '';
+            semesterOrder.forEach(sem => {
+                const semSubs = subjects.filter(s => (s.semester || '1학년 1학기') === sem);
+                if (semSubs.length > 0) {
+                    const semCredits = semSubs.reduce((sum, s) => sum + s.credit, 0);
+                    const semWeightedSum = semSubs.reduce((sum, s) => sum + (s.rank * s.credit), 0);
+                    const semAvg = (semWeightedSum / semCredits).toFixed(2);
+                    semesterSummary.innerHTML += `
+                        <div class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-2.5 flex flex-col justify-between">
+                            <span class="text-[11px] font-semibold text-slate-600">${sem}</span>
+                            <div class="flex items-baseline justify-between mt-1">
+                                <span class="font-bold text-indigo-700 text-sm">${semAvg}등급</span>
+                                <span class="text-[10px] text-slate-400">${semCredits}학점</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    semesterSummary.innerHTML += `
+                        <div class="bg-slate-50 border border-slate-100 rounded-xl p-2.5 flex flex-col justify-between opacity-60">
+                            <span class="text-[11px] font-semibold text-slate-400">${sem}</span>
+                            <span class="text-xs text-slate-400 mt-1">미입력</span>
+                        </div>
+                    `;
+                }
+            });
+
+            // 5. 맞춤형 AI 내신 피드백 생성
+            const highCreditSubjects = subjects.filter(s => s.credit >= 4);
+            const bestHighCredit = highCreditSubjects.sort((a, b) => a.rank - b.rank)[0];
+            const worstHighCredit = highCreditSubjects.sort((a, b) => b.rank - a.rank)[0];
+
+            if (diff > 0.05 && bestHighCredit) {
+                feedbackEl.textContent = `이수 학점이 높은 '${bestHighCredit.name}'(${bestHighCredit.credit}학점)에서 ${bestHighCredit.rank}등급을 받아 전체 내신 평균이 크게 상승했습니다. 주요 고학점 과목 관리가 매우 훌륭합니다!`;
+            } else if (diff < -0.05 && worstHighCredit) {
+                feedbackEl.textContent = `시수가 큰 '${worstHighCredit.name}'(${worstHighCredit.credit}학점)의 ${worstHighCredit.rank}등급이 전체 평균에 큰 영향을 미쳤습니다. 다음 학기에는 4학점 이상 과목을 집중 보완해보세요.`;
+            } else {
+                feedbackEl.textContent = `총 ${totalCredits}학점 기준 평균 ${weightedAvg.toFixed(2)}등급입니다. 과목별 학점 비중과 성취도 균형이 안정적으로 유지되고 있습니다.`;
+            }
+        }
+
+        // 3번 웹으로 넘어가기 전 저장 및 안내
+        function saveAndGoNext() {
+            if (subjects.length === 0) {
+                showToast("최소 1개 이상의 과목을 입력한 뒤 저장해주세요!", "⚠️");
+                return;
+            }
+            saveSubjectsToStorage();
+            showToast("학점 반영 내신 분석 결과가 저장되었습니다! 이제 3번 웹(종합 리포트)을 만드시면 바로 연동됩니다.", "🎉");
+        }
+    </script>
+</body></html>
